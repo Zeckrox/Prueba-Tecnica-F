@@ -1,10 +1,12 @@
 import { useEffect, useState } from 'react';
 import './App.css';
+import userIcon from './assets/user.png';
 
 function App() {
-  const [apiKey, setApiKey] = useState('MiClaveSecreta123');
-  const [accountId, setAccountId] = useState(999);
-  const [showModal, setShowModal] = useState(true);
+  const [apiKey, setApiKey] = useState('');
+  const [accountId, setAccountId] = useState('');
+  const [showModal, setShowModal] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [balance, setBalance] = useState(null)
   const [movements, setMovements] = useState([])
   const [quantity, setQuantity] = useState(null)
@@ -17,34 +19,73 @@ function App() {
   })
   const API_URL = `http://127.0.0.1:8000`
 
+  const obtenerDatos = async (accId, apiK) => {
+    try {
+      const response = await fetch(API_URL+"/consultar", {
+        method: 'POST',
+        body: JSON.stringify({
+        account_id: accId,
+        api_key: apiK  
+      })
+      });
+      if (response.status === 401){
+        setAlert("API KEY Invalida")
+        setLoading(false)
+        setShowModal(true)
+        localStorage.removeItem('apiKey');
+        localStorage.removeItem('accountId');
+        return
+      }
+      const data = await response.json();
+      
+      setBalance(data.balance)
+      setMovements(data.movements)
+      setFilteredMovements(data.movements)
+      setQuantity(data.total_movements)
+      
+      localStorage.setItem('apiKey', apiK);
+      localStorage.setItem('accountId', accId);
+      
+      setShowModal(false);
+    } catch (error) {
+      console.error("Error:", error)
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    const storedApiKey = localStorage.getItem('apiKey');
+    const storedAccountId = localStorage.getItem('accountId');
+
+    setTimeout(() => {
+      if (storedApiKey && storedAccountId) {
+        setApiKey(storedApiKey);
+        setAccountId(storedAccountId);
+        obtenerDatos(storedAccountId, storedApiKey);
+      } else {
+        setLoading(false);
+        setShowModal(true);
+      }
+    }, 1000);
+  }, []);
+
   const handleSubmit = (e) => {
     e.preventDefault();
-    
-    const obtenerDatos = async () => {
-      try {
-        const response = await fetch(API_URL+"/consultar", {
-          method: 'POST',
-          body: JSON.stringify({
-          account_id: accountId,
-          api_key: apiKey  
-        })
-        });
-        if (response.status === 401) return setAlert("API KEY Invalida")
-        const data = await response.json();
-        console.log("Data:", data);
-        
-        setBalance(data.balance)
-        setMovements(data.movements)
-        setFilteredMovements(data.movements)
-        setQuantity(data.total_movements)
+    setLoading(true);
+    obtenerDatos(accountId, apiKey)
+  };
 
-        
-      setShowModal(false);
-      } catch (error) {
-        console.error("Error:", error)
-      }
-    }
-    obtenerDatos()
+  const handleLogout = () => {
+    localStorage.removeItem('apiKey');
+    localStorage.removeItem('accountId');
+    setApiKey('');
+    setAccountId('');
+    setBalance(null);
+    setMovements([]);
+    setFilteredMovements([]);
+    setQuantity(null);
+    setShowModal(true);
   };
 
   useEffect(() => {
@@ -70,82 +111,94 @@ function App() {
   }, [filters]);
 
   return (
-    <>
-      <div className='header' onClick={()=> console.log(movements)}>
-          <h1>BankApp</h1>
-          <div>
-            <button className='button' style={{background: '#b92d5a'}}>Cerrar sesión</button>
-          </div>
+    <div className='app'>
+      <div className='sidebar'>
+      <div>
+        <h1><b>Bank</b>App</h1>
+        <div className='user'>
+            <img src={userIcon} alt="Logo del Banco" width="30" />
+            <p>
+              {!showModal? `Usuario #${accountId}` : '...'}
+            </p>
+        </div>
       </div>
-      <div className='balance-container'>
+          
 
-        <div>
-          <h2>Balance:</h2>
-          <p style={balance >= 0? {color: 'black'}: {color:"red"}}>
-            {balance !== null ? `$${balance}` : '...'}
-          </p>
-        </div>
-
-        <div>
-          <h2>Movimientos:</h2>
-          <p>
-            {quantity !== null ? `${quantity}` : '...'}
-          </p>
-        </div>
-
-        <div>
-          <h2>Cuenta:</h2>
-          <p>
-            {!showModal? `Usuario #${accountId}` : '...'}
-          </p>
-        </div>
-
+      <div>
+        <button onClick={handleLogout} className='button' style={{background: '#b92d5a', marginBottom: '50px'}}>Cerrar sesión</button>
+      </div> 
       </div>
-
-      <div className='movements-container'>
-        <h2>Movimientos</h2>
-        <div className='filters'>
-          <div>Ordenar por:</div>
+      <div className='app-content'>
+        <div className='balance-container'>
           <div>
-            <label>Fecha</label>
-            <select value={filters.fecha} onChange={(e)=> setFilters({monto: "Predeterminado", fecha: e.target.value })}>
-              <option>Predeterminado</option>
-              <option>Recientes</option>
-              <option>Antiguos</option>
-            </select>
+            <h2>Balance Total</h2>
+            <p style={balance >= 0? {color: 'black'}: {color:"red"}}>
+              {balance !== null ? `${balance<0? "-":""}$${balance<0? balance*-1:balance}` : '...'}
+            </p>
           </div>
 
-          <div>
-            <label >Monto</label>
-            <select value={filters.monto}  onChange={(e)=> setFilters({fecha: "Predeterminado", monto: e.target.value })}>
-              <option>Predeterminado</option>
-              <option>Mayor a menor</option>
-              <option>Menor a mayor</option>
-            </select>
-          </div>
         </div>
-        <table className='movements-table'>
-          <thead>
-            <tr>
-              <th>Date</th>
-              <th>Description</th>
-              <th>Amount</th>
-            </tr>
-          </thead>
-          <tbody>
-            {filteredMovements.map((mov)=>{
-              return(
-              <tr key={mov.date+mov.amount+mov.description}>
-                <td>{mov.date}</td>
-                <td>{mov.description}</td>
-                <td style={mov.amount >= 0? {color: '#00b500', fontWeight:'bold'}: {color:"red", fontWeight:'bold'}}>{mov.amount}</td>
+
+        <div className='movements-container'>
+          <div className='movements-header'>
+            <h2>Todos los Movimientos <span>({quantity !== null ? `${quantity}` : '...'})</span></h2>
+            <div className='filters'>
+              <div style={{color: '#8e8e93'}}>Ordenar por:</div>
+              <div>
+                <label>Fecha</label>
+                <select value={filters.fecha} onChange={(e)=> setFilters({monto: "Predeterminado", fecha: e.target.value })}>
+                  <option>Predeterminado</option>
+                  <option>Recientes</option>
+                  <option>Antiguos</option>
+                </select>
+              </div>
+            <div>
+              <label>Monto</label>
+              <select value={filters.monto}  onChange={(e)=> setFilters({fecha: "Predeterminado", monto: e.target.value })}>
+                <option>Predeterminado</option>
+                <option>Mayor a menor</option>
+                <option>Menor a mayor</option>
+              </select>
+            </div>
+          </div>
+
+          </div>
+          <table className='movements-table'>
+            <thead>
+              <tr>
+                <th>Descripción</th>
+                <th>Monto</th>
+                <th>Fecha</th>
               </tr>
-              )
-            })}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {filteredMovements.map((mov)=>{
+                let date = new Date(mov.date)
+                const options = {
+                  year: 'numeric',
+                  month: 'short', 
+                  day: 'numeric'
+                };
+
+                return(
+                <tr key={mov.date+mov.amount+mov.description}>
+                  <td>{mov.description}</td>
+                  <td style={mov.amount >= 0? {color: '#00b500', fontWeight:'bold'}: {color:"red", fontWeight:'bold'}}>{mov.amount}</td>
+                  <td style={{color: "#535862"}}>{date.toLocaleDateString('es-ES', options)}</td>
+                </tr>
+                )
+              })}
+            </tbody>
+          </table>
+        </div>
       </div>
-      {showModal &&
+      
+      {loading && (
+        <div className='modal-background'>
+          <div className='spinner'></div>
+        </div>
+      )}
+      {showModal && !loading &&
         <div className='modal-background'>
           <div className="modal">
               <form onSubmit={handleSubmit}>
@@ -172,13 +225,13 @@ function App() {
                   />
                 </div>
                 <button type="submit" className="button">
-                  Submit
+                  Continuar
                 </button>
               </form>
             </div>
         </div>
       }
-    </>
+    </div>
   );
 }
 
